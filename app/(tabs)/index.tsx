@@ -1,98 +1,215 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import {
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
+import { db } from "../../auth/firebase";
+import { useRouter } from "expo-router";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+type LocationType = {
+  id?: string;
+  name: string;
+};
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const [locations, setLocations] = useState<LocationType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newLocation, setNewLocation] = useState("");
+  const [editingLocation, setEditingLocation] = useState<LocationType | null>(
+    null
+  );
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const router = useRouter();
+
+  const fetchLocations = async () => {
+    setLoading(true);
+    try {
+      const snapshot = await getDocs(collection(db, "locations"));
+      const list: LocationType[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as LocationType);
+      });
+      setLocations(list);
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLocations();
+  }, []);
+
+  const handleAddOrEditLocation = async () => {
+    if (!newLocation.trim()) {
+      Alert.alert("Error", "Location name cannot be empty");
+      return;
+    }
+
+    try {
+      if (editingLocation) {
+        // Edit existing location
+        await updateDoc(doc(db, "locations", editingLocation.id!), {
+          name: newLocation.trim(),
+        });
+        setEditingLocation(null);
+      } else {
+        // Add new location
+        await addDoc(collection(db, "locations"), { name: newLocation.trim() });
+      }
+      setNewLocation("");
+      setModalVisible(false);
+      fetchLocations();
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
+    }
+  };
+
+  const handleDeleteLocation = (locationId?: string) => {
+    if (!locationId) return;
+    Alert.alert(
+      "Confirm Delete",
+      "Are you sure you want to delete this location?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, "locations", locationId));
+              fetchLocations();
+            } catch (error: any) {
+              Alert.alert("Error", error.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLocationPress = (location: string) => {
+    router.push({
+      pathname: "/location/[location]",
+      params: { location },
+    });
+  };
+
+  return (
+    <View className="flex-1 bg-black px-4 pt-16">
+      <Text className="text-3xl font-bold text-blue-400 mb-6">
+        Locations 📍
+      </Text>
+
+      {/* Modern small add location button */}
+      <TouchableOpacity
+        className="bg-blue-600 px-4 py-2 rounded-full mb-6 self-start shadow-md"
+        onPress={() => {
+          setModalVisible(true);
+          setEditingLocation(null);
+          setNewLocation("");
+        }}
+      >
+        <Text className="text-white font-semibold text-base">+ Add</Text>
+      </TouchableOpacity>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#1E90FF" />
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+          {locations.length === 0 ? (
+            <Text className="text-gray-400">No locations yet</Text>
+          ) : (
+            locations.map((location) => (
+              <View
+                key={location.id}
+                className="bg-gray-900 p-4 rounded-2xl border border-gray-700 mb-4 shadow-lg flex-row justify-between items-center"
+              >
+                <TouchableOpacity
+                  className="flex-1"
+                  onPress={() => handleLocationPress(location.name)}
+                >
+                  <Text className="text-white font-semibold text-lg">
+                    {location.name}
+                  </Text>
+                </TouchableOpacity>
+
+                <View className="flex-row gap-3">
+                  <TouchableOpacity
+                    className="p-2 bg-gray-800 rounded-full"
+                    onPress={() => {
+                      setEditingLocation(location);
+                      setNewLocation(location.name);
+                      setModalVisible(true);
+                    }}
+                  >
+                    <Text className="text-blue-400 font-semibold">Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className="p-2 bg-gray-800 rounded-full"
+                    onPress={() => handleDeleteLocation(location.id)}
+                  >
+                    <Text className="text-red-500 font-semibold">Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
+
+      {/* Add/Edit Location Modal */}
+      <Modal visible={modalVisible} transparent animationType="fade">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
+          <View className="bg-gray-900 p-6 rounded-2xl w-4/5 border border-gray-700 shadow-lg">
+            <Text className="text-white text-xl font-bold mb-4">
+              {editingLocation ? "Edit Location" : "Add Location"}
+            </Text>
+            <TextInput
+              className="border border-gray-700 rounded-xl p-3 mb-4 text-white bg-gray-800"
+              placeholder="Enter location name"
+              placeholderTextColor="#888"
+              value={newLocation}
+              onChangeText={setNewLocation}
+            />
+            <View className="flex-row justify-between">
+              <TouchableOpacity
+                className="bg-blue-600 px-4 py-2 rounded-full flex-1 mr-2 items-center"
+                onPress={handleAddOrEditLocation}
+              >
+                <Text className="text-white font-semibold">Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="bg-gray-700 px-4 py-2 rounded-full flex-1 ml-2 items-center"
+                onPress={() => setModalVisible(false)}
+              >
+                <Text className="text-gray-300 font-semibold">Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
