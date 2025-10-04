@@ -12,7 +12,7 @@ import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../auth/firebase";
 
-export default function LoginScreen() {
+function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +27,7 @@ export default function LoginScreen() {
       setLoading(true);
       await signInWithEmailAndPassword(auth, email, password);
       Alert.alert("Success", "Logged in successfully!");
-      router.replace("/"); // Redirect to your main app
+      router.replace("/(tabs)"); // Redirect to your main app
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
     } finally {
@@ -87,3 +87,5 @@ export default function LoginScreen() {
     </View>
   );
 }
+
+export default LoginScreen;

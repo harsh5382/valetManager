@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "valetManager",
+    "name": "Valet Manager",
     "slug": "valetManager",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.harsh5382.valetManager"
     },
     "web": {
       "output": "static",
@@ -43,6 +44,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7909a2fc-238e-4fbb-819e-79e8fbe2faa9"
+      }
     }
   }
 }

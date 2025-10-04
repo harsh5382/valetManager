@@ -9,18 +9,19 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "../auth/firebase";
 
 export default function SignupScreen() {
   const router = useRouter();
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!username || !email || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill out all fields");
       return;
     }
@@ -32,9 +33,21 @@ export default function SignupScreen() {
 
     try {
       setLoading(true);
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      // Update displayName in Firebase Auth
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: username,
+        });
+      }
+
       Alert.alert("Success", "Account created successfully!");
-      router.replace("/"); // redirect to main app
+      router.replace("/(tabs)"); // redirect to main app
     } catch (error: any) {
       Alert.alert("Signup Failed", error.message);
     } finally {
@@ -47,6 +60,18 @@ export default function SignupScreen() {
       <Text className="text-3xl font-bold text-blue-400 mb-8">
         Create Account ✨
       </Text>
+
+      {/* Username */}
+      <View className="w-full mb-4">
+        <Text className="text-gray-300 mb-2 font-semibold">Username</Text>
+        <TextInput
+          className="w-full border border-gray-600 rounded-xl p-3 text-base text-white"
+          placeholder="Enter your username"
+          placeholderTextColor="#888"
+          value={username}
+          onChangeText={setUsername}
+        />
+      </View>
 
       {/* Email */}
       <View className="w-full mb-4">
