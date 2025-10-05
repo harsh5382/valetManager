@@ -7,10 +7,12 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { auth } from "../../auth/firebase";
-import { signOut, User } from "firebase/auth";
-import { Ionicons } from "@expo/vector-icons"; // changed to Ionicons for consistent theme
+import { getAuth, onAuthStateChanged, signOut, User } from "firebase/auth";
+import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import app from "../../auth/firebase";
+
+const auth = getAuth(app);
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -18,17 +20,17 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+
+      // If no user, redirect to login
+      if (!currentUser) {
+        router.replace("/login");
+      }
     });
 
-    if (!user && auth.currentUser) {
-      setUser(auth.currentUser);
-      setLoading(false);
-    }
-
-    return unsubscribe;
+    return () => unsubscribe();
   }, []);
 
   const handleLogout = async () => {
@@ -49,7 +51,6 @@ export default function ProfileScreen() {
     <View className="flex-1 bg-black px-4 pt-16">
       <Text className="text-3xl font-bold text-white mb-6">Profile</Text>
 
-      {/* Profile Card */}
       <BlurView
         intensity={80}
         tint="dark"
@@ -69,7 +70,6 @@ export default function ProfileScreen() {
         <Text className="text-gray-400">{user?.email}</Text>
       </BlurView>
 
-      {/* Logout Button */}
       <TouchableOpacity
         onPress={handleLogout}
         className="bg-red-500 py-3 rounded-3xl items-center mb-6 w-full"
@@ -77,7 +77,7 @@ export default function ProfileScreen() {
         <Text className="text-white font-semibold text-lg">Logout</Text>
       </TouchableOpacity>
 
-      {/* Options List */}
+      {/* Options */}
       <View>
         <BlurView
           intensity={70}

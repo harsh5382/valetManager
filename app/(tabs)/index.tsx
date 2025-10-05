@@ -20,14 +20,17 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  query,
+  where,
 } from "firebase/firestore";
-import { db } from "../../auth/firebase";
+import { db, auth } from "../../auth/firebase";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 type LocationType = {
   id?: string;
   name: string;
+  uid?: string;
 };
 
 export default function HomeScreen() {
@@ -41,10 +44,16 @@ export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const router = useRouter();
 
+  // Fetch only locations created by the current user
   const fetchLocations = async () => {
+    if (!auth.currentUser) return;
     setLoading(true);
     try {
-      const snapshot = await getDocs(collection(db, "locations"));
+      const q = query(
+        collection(db, "locations"),
+        where("uid", "==", auth.currentUser.uid)
+      );
+      const snapshot = await getDocs(q);
       const list: LocationType[] = [];
       snapshot.forEach((docSnap) => {
         list.push({ id: docSnap.id, ...docSnap.data() } as LocationType);
@@ -73,13 +82,22 @@ export default function HomeScreen() {
     }
 
     try {
+      if (!auth.currentUser) {
+        Alert.alert("Error", "You must be logged in!");
+        return;
+      }
+
       if (editingLocation) {
         await updateDoc(doc(db, "locations", editingLocation.id!), {
           name: newLocation.trim(),
         });
       } else {
-        await addDoc(collection(db, "locations"), { name: newLocation.trim() });
+        await addDoc(collection(db, "locations"), {
+          name: newLocation.trim(),
+          uid: auth.currentUser.uid, // <-- save current user's UID
+        });
       }
+
       setEditingLocation(null);
       setNewLocation("");
       setModalVisible(false);
@@ -182,7 +200,7 @@ export default function HomeScreen() {
       <TouchableOpacity
         className="bg-blue-600 w-16 h-16 rounded-full items-center justify-center shadow-lg absolute right-9"
         style={{
-          bottom: Platform.OS === "ios" ? 100 : 110, // 👈 higher placement for iOS & Android
+          bottom: Platform.OS === "ios" ? 100 : 110,
           elevation: 8,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 4 },

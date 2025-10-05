@@ -25,6 +25,9 @@ export default function DriverCard({
   const [expanded, setExpanded] = useState(false);
   const animatedHeight = useRef(new Animated.Value(0)).current;
 
+  const isActive =
+    driver.location === currentLocation && currentLocation !== "";
+
   useEffect(() => {
     Animated.timing(animatedHeight, {
       toValue: expanded ? 1 : 0,
@@ -39,14 +42,28 @@ export default function DriverCard({
       tint="dark"
       className="rounded-3xl mb-4 overflow-hidden border border-gray-800"
     >
+      {/* Collapsed View */}
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={() => setExpanded((prev) => !prev)}
         className="px-5 py-4 flex-row justify-between items-center"
       >
-        <Text className="text-white font-semibold text-lg">
-          {driver.firstName} {driver.lastName}
-        </Text>
+        <View className="flex-row items-center gap-2">
+          <Text className="text-white font-semibold text-lg">
+            {driver.firstName} {driver.lastName}
+          </Text>
+          {/* Active/Inactive Badge */}
+          <View
+            className={`px-2 py-1 rounded-full ${
+              isActive ? "bg-green-500" : "bg-red-500"
+            }`}
+          >
+            <Text className="text-xs text-white">
+              {isActive ? "Active" : "Inactive"}
+            </Text>
+          </View>
+        </View>
+
         <View className="flex-row gap-4">
           <TouchableOpacity onPress={() => onEdit(driver)}>
             <Ionicons name="pencil" size={20} color="#60A5FA" />
@@ -57,6 +74,7 @@ export default function DriverCard({
         </View>
       </TouchableOpacity>
 
+      {/* Expanded View */}
       {expanded && (
         <Animated.View style={{ opacity: animatedHeight }}>
           <View className="px-5 pb-4 space-y-1">
