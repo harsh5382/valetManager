@@ -18,7 +18,7 @@ import {
   updateDoc,
   doc,
 } from "firebase/firestore";
-import { db } from "../auth/firebase";
+import { db, auth } from "../auth/firebase";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 type Driver = {
@@ -26,11 +26,11 @@ type Driver = {
   firstName: string;
   lastName: string;
   phone: string;
-  location: string;
+  location?: string;
   startTime: string;
   endTime: string;
   payment: string;
-  startDate?: Timestamp; // new field
+  startDate?: Timestamp;
 };
 
 type DriverFormProps = {
@@ -38,7 +38,7 @@ type DriverFormProps = {
   visible: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  driverData?: Driver | null; // Optional for editing
+  driverData?: Driver | null;
 };
 
 export default function DriverForm({
@@ -85,9 +85,14 @@ export default function DriverForm({
       return;
     }
 
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      Alert.alert("Error", "No user logged in. Please log in again.");
+      return;
+    }
+
     try {
       if (driverData?.id) {
-        // Edit mode
         await updateDoc(doc(db, "drivers", driverData.id), {
           firstName,
           lastName,
@@ -100,8 +105,8 @@ export default function DriverForm({
         });
         Alert.alert("Success", "Driver updated successfully!");
       } else {
-        // Add mode
         await addDoc(collection(db, "drivers"), {
+          createdBy: currentUser.uid,
           firstName,
           lastName,
           phone,
@@ -115,6 +120,7 @@ export default function DriverForm({
         });
         Alert.alert("Success", "Driver added successfully!");
       }
+
       onSuccess();
       onClose();
     } catch (error: any) {
@@ -157,40 +163,46 @@ export default function DriverForm({
         style={{ flex: 1, backgroundColor: "#000" }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView
-          contentContainerStyle={{ padding: 20 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text className="text-3xl font-bold text-blue-400 mb-6">
+        <ScrollView contentContainerStyle={{ padding: 20 }}>
+          <Text className="text-3xl font-bold text-blue-400 mb-8 text-center">
             {driverData?.id ? "Edit Driver" : "Add Driver"}
           </Text>
 
-          <TextInput
-            className="w-full border border-gray-700 rounded-xl p-3 text-white mb-4 bg-gray-800"
-            placeholder="First Name"
-            placeholderTextColor="#888"
-            value={firstName}
-            onChangeText={setFirstName}
-          />
-          <TextInput
-            className="w-full border border-gray-700 rounded-xl p-3 text-white mb-4 bg-gray-800"
-            placeholder="Last Name"
-            placeholderTextColor="#888"
-            value={lastName}
-            onChangeText={setLastName}
-          />
-          <TextInput
-            className="w-full border border-gray-700 rounded-xl p-3 text-white mb-4 bg-gray-800"
-            placeholder="Phone"
-            placeholderTextColor="#888"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-          />
+          {/** Input fields */}
+          {[
+            {
+              value: firstName,
+              setter: setFirstName,
+              placeholder: "First Name",
+            },
+            { value: lastName, setter: setLastName, placeholder: "Last Name" },
+            {
+              value: phone,
+              setter: setPhone,
+              placeholder: "Phone",
+              keyboard: "phone-pad",
+            },
+            {
+              value: payment,
+              setter: setPayment,
+              placeholder: "Payment",
+              keyboard: "numeric",
+            },
+          ].map((input, index) => (
+            <TextInput
+              key={index}
+              className="w-full bg-gray-900 border border-gray-700 rounded-2xl p-4 mb-4 text-white text-base"
+              placeholder={input.placeholder}
+              placeholderTextColor="#888"
+              value={input.value}
+              onChangeText={input.setter}
+              keyboardType={input.keyboard as any}
+            />
+          ))}
 
-          {/* Start Date Picker */}
+          {/** Date Picker */}
           <TouchableOpacity
-            className="w-full border border-gray-700 rounded-xl p-3 mb-4 bg-gray-800 justify-center"
+            className="w-full bg-gray-900 border border-gray-700 rounded-2xl p-4 mb-4"
             onPress={() => setShowDatePicker(true)}
           >
             <Text className="text-white">{startDate.toDateString()}</Text>
@@ -204,49 +216,44 @@ export default function DriverForm({
             />
           )}
 
-          <TouchableOpacity
-            className="w-full border border-gray-700 rounded-xl p-3 mb-4 bg-gray-800 justify-center"
-            onPress={() => setShowStartPicker(true)}
-          >
-            <Text className="text-white">
-              {startTime || "Select Start Time"}
-            </Text>
-          </TouchableOpacity>
-          {showStartPicker && (
-            <DateTimePicker
-              value={new Date()}
-              mode="time"
-              display="spinner"
-              onChange={onStartTimeChange}
-            />
-          )}
+          {[
+            {
+              label: "Start Time",
+              value: startTime,
+              setter: setShowStartPicker,
+              show: showStartPicker,
+              onChange: onStartTimeChange,
+            },
+            {
+              label: "End Time",
+              value: endTime,
+              setter: setShowEndPicker,
+              show: showEndPicker,
+              onChange: onEndTimeChange,
+            },
+          ].map((time, idx) => (
+            <React.Fragment key={idx}>
+              <TouchableOpacity
+                className="w-full bg-gray-900 border border-gray-700 rounded-2xl p-4 mb-4"
+                onPress={() => time.setter(true)}
+              >
+                <Text className="text-white">{time.value || time.label}</Text>
+              </TouchableOpacity>
+              {time.show && (
+                <DateTimePicker
+                  key={time.label} // optional, helps React track this child
+                  value={new Date()}
+                  mode="time"
+                  display="spinner"
+                  onChange={time.onChange}
+                />
+              )}
+            </React.Fragment>
+          ))}
 
+          {/** Save Button */}
           <TouchableOpacity
-            className="w-full border border-gray-700 rounded-xl p-3 mb-4 bg-gray-800 justify-center"
-            onPress={() => setShowEndPicker(true)}
-          >
-            <Text className="text-white">{endTime || "Select End Time"}</Text>
-          </TouchableOpacity>
-          {showEndPicker && (
-            <DateTimePicker
-              value={new Date()}
-              mode="time"
-              display="spinner"
-              onChange={onEndTimeChange}
-            />
-          )}
-
-          <TextInput
-            className="w-full border border-gray-700 rounded-xl p-3 mb-4 text-white bg-gray-800"
-            placeholder="Payment"
-            placeholderTextColor="#888"
-            value={payment}
-            onChangeText={setPayment}
-            keyboardType="numeric"
-          />
-
-          <TouchableOpacity
-            className="bg-blue-600 py-3 rounded-xl items-center mb-3"
+            className="bg-blue-600 py-4 rounded-2xl items-center mb-4 shadow-lg"
             onPress={handleSaveDriver}
           >
             <Text className="text-white font-semibold text-lg">
@@ -254,6 +261,7 @@ export default function DriverForm({
             </Text>
           </TouchableOpacity>
 
+          {/** Cancel Button */}
           <TouchableOpacity className="items-center" onPress={onClose}>
             <Text className="text-gray-400 font-semibold">Cancel</Text>
           </TouchableOpacity>

@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
@@ -39,7 +41,6 @@ export default function SignupScreen() {
         password
       );
 
-      // Update displayName in Firebase Auth
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, {
           displayName: username,
@@ -47,7 +48,7 @@ export default function SignupScreen() {
       }
 
       Alert.alert("Success", "Account created successfully!");
-      router.replace("/(tabs)"); // redirect to main app
+      router.replace("/(tabs)");
     } catch (error: any) {
       Alert.alert("Signup Failed", error.message);
     } finally {
@@ -56,16 +57,19 @@ export default function SignupScreen() {
   };
 
   return (
-    <View className="flex-1 justify-center items-center bg-black px-6">
-      <Text className="text-3xl font-bold text-blue-400 mb-8">
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      className="flex-1 bg-black justify-center px-6"
+    >
+      <Text className="text-4xl font-bold text-blue-400 mb-12 text-center">
         Create Account ✨
       </Text>
 
       {/* Username */}
       <View className="w-full mb-4">
-        <Text className="text-gray-300 mb-2 font-semibold">Username</Text>
+        <Text className="text-gray-400 mb-2 font-semibold">Username</Text>
         <TextInput
-          className="w-full border border-gray-600 rounded-xl p-3 text-base text-white"
+          className="w-full bg-gray-900 border border-gray-700 rounded-2xl p-4 text-white text-base"
           placeholder="Enter your username"
           placeholderTextColor="#888"
           value={username}
@@ -75,9 +79,9 @@ export default function SignupScreen() {
 
       {/* Email */}
       <View className="w-full mb-4">
-        <Text className="text-gray-300 mb-2 font-semibold">Email</Text>
+        <Text className="text-gray-400 mb-2 font-semibold">Email</Text>
         <TextInput
-          className="w-full border border-gray-600 rounded-xl p-3 text-base text-white"
+          className="w-full bg-gray-900 border border-gray-700 rounded-2xl p-4 text-white text-base"
           placeholder="Enter your email"
           placeholderTextColor="#888"
           value={email}
@@ -89,9 +93,9 @@ export default function SignupScreen() {
 
       {/* Password */}
       <View className="w-full mb-4">
-        <Text className="text-gray-300 mb-2 font-semibold">Password</Text>
+        <Text className="text-gray-400 mb-2 font-semibold">Password</Text>
         <TextInput
-          className="w-full border border-gray-600 rounded-xl p-3 text-base text-white"
+          className="w-full bg-gray-900 border border-gray-700 rounded-2xl p-4 text-white text-base"
           placeholder="Enter your password"
           placeholderTextColor="#888"
           value={password}
@@ -101,12 +105,12 @@ export default function SignupScreen() {
       </View>
 
       {/* Confirm Password */}
-      <View className="w-full mb-6">
-        <Text className="text-gray-300 mb-2 font-semibold">
+      <View className="w-full mb-8">
+        <Text className="text-gray-400 mb-2 font-semibold">
           Confirm Password
         </Text>
         <TextInput
-          className="w-full border border-gray-600 rounded-xl p-3 text-base text-white"
+          className="w-full bg-gray-900 border border-gray-700 rounded-2xl p-4 text-white text-base"
           placeholder="Re-enter your password"
           placeholderTextColor="#888"
           value={confirmPassword}
@@ -115,10 +119,11 @@ export default function SignupScreen() {
         />
       </View>
 
+      {/* Sign Up Button */}
       <TouchableOpacity
         onPress={handleSignup}
         disabled={loading}
-        className="w-full bg-blue-600 rounded-xl py-3 items-center mb-4"
+        className="w-full bg-blue-600 rounded-2xl py-4 items-center mb-6 shadow-lg"
       >
         {loading ? (
           <ActivityIndicator color="#fff" />
@@ -127,12 +132,16 @@ export default function SignupScreen() {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.push("/login")}>
+      {/* Login Link */}
+      <TouchableOpacity
+        onPress={() => router.push("/login")}
+        className="items-center"
+      >
         <Text className="text-gray-400">
           Already have an account?{" "}
           <Text className="text-blue-400 font-semibold">Log in</Text>
         </Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardAvoidingView>
   );
 }

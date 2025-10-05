@@ -1,15 +1,13 @@
-// app/profile/daily-payment.tsx
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../../auth/firebase";
-import { FontAwesome5 } from "@expo/vector-icons";
 
 type Driver = {
   id?: string;
   firstName: string;
   lastName: string;
-  payment: string; // assuming payment is stored as string
+  payment: string;
   location?: string;
 };
 
@@ -49,7 +47,7 @@ export default function DailyPaymentScreen() {
 
   return (
     <View className="flex-1 bg-black pt-16 px-4">
-      <Text className="text-3xl font-bold text-blue-400 mb-6">
+      <Text className="text-3xl font-bold text-white mb-6">
         Daily Payment
       </Text>
 
@@ -61,26 +59,31 @@ export default function DailyPaymentScreen() {
             Total Payment: ₹{totalPayment}
           </Text>
 
-          <ScrollView>
-            {drivers.map((driver, index) => (
-              <View
-                key={driver.id || index}
-                className="bg-gray-900 p-4 rounded-xl border border-gray-700 flex-row justify-between items-center"
-                style={{ marginBottom: 12 }}
-              >
-                <View>
-                  <Text className="text-white font-semibold">
-                    {driver.firstName} {driver.lastName}
-                  </Text>
-                  <Text className="text-gray-300 mt-1">
-                    Location: {driver.location || "-"}
+          <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+            {drivers.length === 0 ? (
+              <Text className="text-gray-400 text-center mt-10">
+                No driver payments yet
+              </Text>
+            ) : (
+              drivers.map((driver, index) => (
+                <View
+                  key={driver.id || index}
+                  className="bg-gray-900 p-4 rounded-2xl border border-gray-700 flex-row justify-between items-center mb-4"
+                >
+                  <View>
+                    <Text className="text-white font-semibold text-lg">
+                      {driver.firstName} {driver.lastName}
+                    </Text>
+                    <Text className="text-gray-300 mt-1">
+                      Location: {driver.location || "-"}
+                    </Text>
+                  </View>
+                  <Text className="text-white font-bold text-lg">
+                    ₹{driver.payment || 0}
                   </Text>
                 </View>
-                <Text className="text-white font-bold">
-                  ₹{driver.payment || 0}
-                </Text>
-              </View>
-            ))}
+              ))
+            )}
           </ScrollView>
         </>
       )}

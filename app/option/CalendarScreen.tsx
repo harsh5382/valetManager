@@ -11,6 +11,7 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "../../auth/firebase";
 import { Calendar } from "react-native-calendars";
 import { FontAwesome5 } from "@expo/vector-icons";
+
 type Driver = {
   id?: string;
   firstName: string;
@@ -20,7 +21,7 @@ type Driver = {
   startTime: string;
   endTime: string;
   payment: string;
-  startDate?: any; // Firestore Timestamp
+  startDate?: any;
 };
 
 export default function CalendarScreen() {
@@ -83,19 +84,17 @@ export default function CalendarScreen() {
           textDayFontWeight: "600",
           textMonthFontWeight: "bold",
         }}
+        style={{ marginBottom: 16 }}
       />
 
+      {/* Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent={false}>
-        <View className="flex-1 bg-black pt-16 px-4">
-          {/* Header with Close Icon */}
+        <View className="flex-1 bg-black pt-5 px-4">
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-white font-bold text-2xl">
               Drivers for {selectedDate}
             </Text>
-            <TouchableOpacity
-              onPress={() => setModalVisible(false)}
-              className="bg-gray-800 p-2 rounded-full"
-            >
+            <TouchableOpacity onPress={() => setModalVisible(false)}>
               <FontAwesome5 name="times" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -109,8 +108,7 @@ export default function CalendarScreen() {
               {driversForSelectedDate.map((driver, index) => (
                 <View
                   key={driver.id || index}
-                  className="bg-gray-900 p-4 rounded-2xl border border-gray-700"
-                  style={{ marginBottom: 16 }} // spacing between cards
+                  className="bg-gray-900 p-4 rounded-2xl border border-gray-700 mb-4"
                 >
                   <Text className="text-white font-bold text-lg">
                     {driver.firstName} {driver.lastName}
