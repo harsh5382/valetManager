@@ -1,15 +1,15 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Image,
-  ActivityIndicator,
-} from "react-native";
-import { useRouter } from "expo-router";
-import { getAuth, onAuthStateChanged, signOut, User } from "firebase/auth";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { useRouter } from "expo-router";
+import { getAuth, onAuthStateChanged, signOut, User } from "firebase/auth";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import app from "../../auth/firebase";
 
 const auth = getAuth(app);
@@ -101,7 +101,7 @@ export default function ProfileScreen() {
           className="rounded-2xl overflow-hidden border border-gray-700 mb-4"
         >
           <TouchableOpacity
-            onPress={() => {}}
+            onPress={() => router.push("/option/GenerateBillScreen")}
             className="p-4 flex-row justify-between items-center"
           >
             <Text className="text-white font-semibold text-lg">

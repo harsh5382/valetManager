@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, ActivityIndicator, Alert } from "react-native";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../../auth/firebase";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db, auth } from "../../auth/firebase";
 
 type Driver = {
   id?: string;
@@ -9,6 +9,7 @@ type Driver = {
   lastName: string;
   payment: string;
   location?: string;
+  createdBy?: string;
 };
 
 export default function DailyPaymentScreen() {
@@ -19,7 +20,16 @@ export default function DailyPaymentScreen() {
   const fetchDrivers = async () => {
     setLoading(true);
     try {
-      const snapshot = await getDocs(collection(db, "drivers"));
+      const user = auth.currentUser;
+      if (!user) return setDrivers([]);
+
+      // ✅ Only fetch drivers created by the logged-in user
+      const q = query(
+        collection(db, "drivers"),
+        where("createdBy", "==", user.uid)
+      );
+
+      const snapshot = await getDocs(q);
       const list: Driver[] = [];
       let total = 0;
 
@@ -27,7 +37,6 @@ export default function DailyPaymentScreen() {
         const data = docSnap.data() as Driver;
         list.push({ id: docSnap.id, ...data });
 
-        // accumulate total payment
         const paymentNumber = Number(data.payment) || 0;
         total += paymentNumber;
       });
@@ -47,9 +56,7 @@ export default function DailyPaymentScreen() {
 
   return (
     <View className="flex-1 bg-black pt-16 px-4">
-      <Text className="text-3xl font-bold text-white mb-6">
-        Daily Payment
-      </Text>
+      <Text className="text-3xl font-bold text-white mb-6">Daily Payment</Text>
 
       {loading ? (
         <ActivityIndicator size="large" color="#1E90FF" />
