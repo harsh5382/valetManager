@@ -7,13 +7,17 @@ import {
   ActivityIndicator,
   TextInput,
   ScrollView,
-  Platform,
+  Alert,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db, auth } from "../../auth/firebase";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Print from "expo-print";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+
 type Driver = {
   id?: string;
   firstName: string;
@@ -21,7 +25,7 @@ type Driver = {
   phone?: string;
   location?: string;
   payment?: string | number;
-  startDate?: any; // Firestore Timestamp
+  startDate?: any;
   createdBy?: string;
 };
 
@@ -30,16 +34,12 @@ export default function GenerateBillScreen() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [mode, setMode] = useState<"month" | "today" | "driver" | null>(null);
-
-  // For "driver" mode
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Summary state (calculated locally from fetched drivers)
   const [summary, setSummary] = useState<any>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
-    // Fetch only drivers created by current user
     fetchDrivers();
   }, []);
 
@@ -68,14 +68,11 @@ export default function GenerateBillScreen() {
     setMode(m);
     setSummary(null);
     setModalVisible(true);
-
-    // compute summary after small delay (simulate loading state)
     setTimeout(() => computeSummary(m), 150);
   };
 
   const computeSummary = (m: "month" | "today" | "driver") => {
     const now = new Date();
-
     if (m === "today") {
       const todayStr = now.toISOString().split("T")[0];
       const todays = drivers.filter((d) => {
@@ -85,7 +82,6 @@ export default function GenerateBillScreen() {
           : new Date(d.startDate).toISOString().split("T")[0];
         return driverDate === todayStr;
       });
-
       const total = todays.reduce(
         (acc, cur) => acc + (Number(cur.payment) || 0),
         0
@@ -95,10 +91,8 @@ export default function GenerateBillScreen() {
     }
 
     if (m === "month") {
-      // whole month for current month
       const year = now.getFullYear();
-      const month = now.getMonth(); // 0-index
-
+      const month = now.getMonth();
       const monthItems = drivers.filter((d) => {
         if (!d.startDate) return false;
         const dt = d.startDate.toDate
@@ -107,7 +101,6 @@ export default function GenerateBillScreen() {
         return dt.getFullYear() === year && dt.getMonth() === month;
       });
 
-      // group by driver
       const map: Record<
         string,
         { driver: Driver; days: number; total: number }
@@ -131,10 +124,7 @@ export default function GenerateBillScreen() {
         return;
       }
 
-      // compute driver-specific days and monthly summary (current month)
       const driverRecords = drivers.filter((d) => d.id === selectedDriverId);
-
-      // For "how many days they worked" we can count unique dates in their records
       const dates = new Set<string>();
       let total = 0;
       driverRecords.forEach((r) => {
@@ -142,18 +132,15 @@ export default function GenerateBillScreen() {
         const dt = r.startDate.toDate
           ? r.startDate.toDate()
           : new Date(r.startDate);
-        const dateKey = dt.toISOString().split("T")[0];
-        dates.add(dateKey);
+        dates.add(dt.toISOString().split("T")[0]);
         total += Number(r.payment) || 0;
       });
-
       setSummary({
         driver: driverRecords[0],
         daysWorked: dates.size,
         total,
         records: driverRecords,
       });
-      return;
     }
   };
 
@@ -165,8 +152,78 @@ export default function GenerateBillScreen() {
     );
   }, [drivers, searchQuery]);
 
+  // Generate PDF using HTML
+  const generatePDF = async (html: string) => {
+    try {
+      setPdfLoading(true); // start loader
+      const { uri } = await Print.printToFileAsync({ html });
+
+      // Move to permanent file
+      const fileUri = FileSystem.documentDirectory + "bill.pdf";
+      await FileSystem.moveAsync({
+        from: uri,
+        to: fileUri,
+      });
+
+      // Share
+      await Sharing.shareAsync(fileUri);
+    } catch (err) {
+      console.log("PDF generation error:", err);
+      Alert.alert("Error", "Failed to generate PDF.");
+    } finally {
+      setPdfLoading(false); // stop loader
+    }
+  };
+
+  const generateTodayPDF = () => {
+    if (!summary?.items || summary.items.length === 0) {
+      Alert.alert("No records", "No records for today.");
+      return;
+    }
+
+    let html = `<h1>Today's Bill</h1><p>Total: ₹${summary.total}</p><table border="1" style="border-collapse:collapse;width:100%"><tr><th>Name</th><th>Location</th><th>Payment</th></tr>`;
+    summary.items.forEach((d: Driver) => {
+      html += `<tr><td>${d.firstName} ${d.lastName}</td><td>${d.location || "-"}</td><td>₹${d.payment}</td></tr>`;
+    });
+    html += `</table>`;
+    generatePDF(html);
+  };
+
+  const generateMonthPDF = () => {
+    if (!summary?.grouped || summary.grouped.length === 0) {
+      Alert.alert("No records", "No records for this month.");
+      return;
+    }
+
+    let html = `<h1>Month Bill</h1><p>Total: ₹${summary.total}</p><table border="1" style="border-collapse:collapse;width:100%"><tr><th>Name</th><th>Days</th><th>Total</th></tr>`;
+    summary.grouped.forEach((g: any) => {
+      html += `<tr><td>${g.driver.firstName} ${g.driver.lastName}</td><td>${g.days}</td><td>₹${g.total}</td></tr>`;
+    });
+    html += `</table>`;
+    generatePDF(html);
+  };
+
+  const generateDriverPDF = () => {
+    if (!summary?.records || summary.records.length === 0) {
+      Alert.alert("No records", "No records for this driver.");
+      return;
+    }
+
+    let html = `<h1>Driver: ${summary.driver.firstName} ${summary.driver.lastName}</h1>`;
+    html += `<p>Days Worked: ${summary.daysWorked}</p><p>Total: ₹${summary.total}</p>`;
+    html += `<table border="1" style="border-collapse:collapse;width:100%"><tr><th>Date</th><th>Location</th><th>Payment</th></tr>`;
+    summary.records.forEach((r: Driver) => {
+      const dt = r.startDate.toDate
+        ? r.startDate.toDate()
+        : new Date(r.startDate);
+      html += `<tr><td>${dt.toDateString()}</td><td>${r.location || "-"}</td><td>₹${r.payment}</td></tr>`;
+    });
+    html += `</table>`;
+    generatePDF(html);
+  };
+
   return (
-    <View className="flex-1 bg-black pt-16 px-4">
+    <SafeAreaView className="flex-1 bg-black px-4 pt-6">
       <Text className="text-3xl font-bold text-white mb-6">Generate Bill</Text>
 
       <BlurView
@@ -217,14 +274,9 @@ export default function GenerateBillScreen() {
         </TouchableOpacity>
       </BlurView>
 
-      <Text className="text-gray-400 mb-2">
-        Tip: PDF generation will include a header, table of records, totals, and
-        your business info.
-      </Text>
-
-      {/* Modal: shows results for chosen mode and actions */}
+      {/* Modal for results */}
       <Modal visible={modalVisible} animationType="slide" transparent={false}>
-        <View className="flex-1 bg-black px-4">
+        <SafeAreaView className="flex-1 bg-black  px-4 pt-6">
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-white text-2xl font-bold">
               {mode === "month"
@@ -248,88 +300,82 @@ export default function GenerateBillScreen() {
             <ActivityIndicator size="large" color="#1E90FF" />
           ) : (
             <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-              {/* Today mode */}
               {mode === "today" && (
-                <View>
+                <>
                   <Text className="text-gray-300 mb-2">
                     Total for today: ₹{summary.total || 0}
                   </Text>
-
-                  {summary.items && summary.items.length === 0 && (
+                  {summary.items.length === 0 && (
                     <Text className="text-gray-400">No records for today</Text>
                   )}
-
-                  {summary.items &&
-                    summary.items.map((it: Driver) => (
-                      <View
-                        key={it.id}
-                        className="bg-gray-900 p-4 rounded-2xl mb-3 border border-gray-700"
-                      >
-                        <Text className="text-white font-semibold">
-                          {it.firstName} {it.lastName}
-                        </Text>
-                        <Text className="text-gray-300 mt-1">
-                          Location: {it.location || "-"}
-                        </Text>
-                        <Text className="text-gray-300 mt-1">
-                          Payment: ₹{it.payment || 0}
-                        </Text>
-                      </View>
-                    ))}
-
+                  {summary.items.map((it: Driver) => (
+                    <View
+                      key={it.id}
+                      className="bg-gray-900 p-4 rounded-2xl mb-3 border border-gray-700"
+                    >
+                      <Text className="text-white font-semibold">
+                        {it.firstName} {it.lastName}
+                      </Text>
+                      <Text className="text-gray-300 mt-1">
+                        Location: {it.location || "-"}
+                      </Text>
+                      <Text className="text-gray-300 mt-1">
+                        Payment: ₹{it.payment || 0}
+                      </Text>
+                    </View>
+                  ))}
                   <TouchableOpacity
-                    disabled={true}
+                    onPress={generateTodayPDF}
                     className="mt-4 bg-blue-600 p-3 rounded-2xl items-center"
+                    disabled={pdfLoading} // prevent multiple clicks
                   >
-                    <Text className="text-white font-semibold">
-                      Generate PDF (placeholder)
-                    </Text>
+                    {pdfLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text className="text-white font-semibold">
+                        Generate PDF
+                      </Text>
+                    )}
                   </TouchableOpacity>
-                </View>
+                </>
               )}
 
-              {/* Month mode */}
               {mode === "month" && (
-                <View>
+                <>
                   <Text className="text-gray-300 mb-2">
                     Total payout this month: ₹{summary.total || 0}
                   </Text>
-
-                  {summary.grouped && summary.grouped.length === 0 && (
-                    <Text className="text-gray-400">
-                      No records for this month
-                    </Text>
-                  )}
-
-                  {summary.grouped &&
-                    summary.grouped.map((g: any, idx: number) => (
-                      <View
-                        key={idx}
-                        className="bg-gray-900 p-4 rounded-2xl mb-3 border border-gray-700"
-                      >
-                        <Text className="text-white font-semibold">
-                          {g.driver.firstName} {g.driver.lastName}
-                        </Text>
-                        <Text className="text-gray-300 mt-1">
-                          Days: {g.days} | Total: ₹{g.total}
-                        </Text>
-                      </View>
-                    ))}
-
+                  {summary.grouped.map((g: any, idx: number) => (
+                    <View
+                      key={idx}
+                      className="bg-gray-900 p-4 rounded-2xl mb-3 border border-gray-700"
+                    >
+                      <Text className="text-white font-semibold">
+                        {g.driver.firstName} {g.driver.lastName}
+                      </Text>
+                      <Text className="text-gray-300 mt-1">
+                        Days: {g.days} | Total: ₹{g.total}
+                      </Text>
+                    </View>
+                  ))}
                   <TouchableOpacity
-                    disabled={true}
+                    onPress={generateMonthPDF}
                     className="mt-4 bg-blue-600 p-3 rounded-2xl items-center"
+                    disabled={pdfLoading} // prevent multiple clicks
                   >
-                    <Text className="text-white font-semibold">
-                      Generate Month PDF (placeholder)
-                    </Text>
+                    {pdfLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text className="text-white font-semibold">
+                        Generate PDF
+                      </Text>
+                    )}
                   </TouchableOpacity>
-                </View>
+                </>
               )}
 
-              {/* Driver mode */}
               {mode === "driver" && (
-                <View>
+                <>
                   <TextInput
                     placeholder="Search driver"
                     placeholderTextColor="#888"
@@ -337,7 +383,6 @@ export default function GenerateBillScreen() {
                     onChangeText={setSearchQuery}
                     className="bg-gray-900 p-3 rounded-xl text-white mb-3 border border-gray-700"
                   />
-
                   <ScrollView style={{ maxHeight: 220 }}>
                     {filteredDrivers.map((d) => (
                       <TouchableOpacity
@@ -372,32 +417,27 @@ export default function GenerateBillScreen() {
                       <Text className="text-gray-300">
                         Total earned: ₹{summary.total}
                       </Text>
-
                       <TouchableOpacity
-                        disabled={true}
+                        onPress={generateDriverPDF}
                         className="mt-4 bg-blue-600 p-3 rounded-2xl items-center"
+                        disabled={pdfLoading} // prevent multiple clicks
                       >
-                        <Text className="text-white font-semibold">
-                          Generate Driver Monthly PDF (placeholder)
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        disabled={true}
-                        className="mt-3 bg-gray-700 p-3 rounded-2xl items-center"
-                      >
-                        <Text className="text-gray-300">
-                          Generate Driver Date-range PDF (placeholder)
-                        </Text>
+                        {pdfLoading ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text className="text-white font-semibold">
+                            Generate PDF
+                          </Text>
+                        )}
                       </TouchableOpacity>
                     </View>
                   )}
-                </View>
+                </>
               )}
             </ScrollView>
           )}
-        </View>
+        </SafeAreaView>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
