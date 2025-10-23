@@ -223,7 +223,7 @@ export default function GenerateBillScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-black px-4 pt-6">
+    <SafeAreaView className="flex-1 bg-black px-4 pt-16">
       <Text className="text-3xl font-bold text-white mb-6">Generate Bill</Text>
 
       <BlurView
@@ -252,7 +252,7 @@ export default function GenerateBillScreen() {
             style={{ backgroundColor: "rgba(30,144,255,0.06)" }}
           >
             <Ionicons name="today-outline" size={22} color="#1E90FF" />
-            <Text className="text-white mt-2 font-semibold">Today's Bill</Text>
+            <Text className="text-white mt-16 font-semibold">Today's Bill</Text>
             <Text className="text-gray-400 text-xs mt-1">
               Only today's records
             </Text>
@@ -276,7 +276,7 @@ export default function GenerateBillScreen() {
 
       {/* Modal for results */}
       <Modal visible={modalVisible} animationType="slide" transparent={false}>
-        <SafeAreaView className="flex-1 bg-black  px-4 pt-6">
+        <SafeAreaView className="flex-1 bg-black  px-4 pt-16">
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-white text-2xl font-bold">
               {mode === "month"

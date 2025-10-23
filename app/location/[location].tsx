@@ -33,6 +33,31 @@ export default function LocationDetail() {
     undefined
   );
 
+  // Utility: Update startDate if older than today
+const updateDriverDateIfNeeded = async (driver: Driver) => {
+  if (!driver.id || !driver.startDate) return;
+
+  const startDate =
+    driver.startDate instanceof Timestamp
+      ? driver.startDate.toDate()
+      : new Date(driver.startDate);
+
+  const now = new Date();
+
+  if (startDate.toDateString() !== now.toDateString()) {
+    try {
+      const driverRef = doc(db, "drivers", driver.id);
+      await updateDoc(driverRef, {
+        startDate: Timestamp.fromDate(new Date(now.setHours(0, 0, 0, 0))),
+      });
+      console.log(`Driver ${driver.firstName} date updated to today`);
+    } catch (err: any) {
+      console.log(`Failed to update driver ${driver.firstName}:`, err.message);
+    }
+  }
+};
+
+  // Fetch drivers from Firestore
   const fetchDrivers = async () => {
     if (!location) return;
     setLoading(true);
@@ -52,7 +77,7 @@ export default function LocationDetail() {
       const snapshot = await getDocs(q);
       const list: Driver[] = [];
 
-      snapshot.forEach((docSnap) => {
+      for (const docSnap of snapshot.docs) {
         const rawData = docSnap.data();
         const data: Driver = {
           id: docSnap.id,
@@ -66,10 +91,13 @@ export default function LocationDetail() {
           startDate: rawData.startDate || undefined,
         };
 
+        // Check if startDate needs to be updated
+        await updateDriverDateIfNeeded(data);
+
         if (data.location === location || data.location === "") {
           list.push(data);
         }
-      });
+      }
 
       setDrivers(list);
     } catch (error: any) {

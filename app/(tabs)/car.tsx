@@ -226,7 +226,7 @@ export default function CarScreen() {
           setModalVisible(true);
         }}
       >
-        <Text className="text-white text-4xl font-bold">+</Text>
+        <Ionicons name="add" size={28} color="white" />
       </TouchableOpacity>
 
       <DriverForm

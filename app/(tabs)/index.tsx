@@ -26,7 +26,7 @@ import {
 import { db, auth } from "../../auth/firebase";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-
+import { onAuthStateChanged } from "firebase/auth";
 type LocationType = {
   id?: string;
   name: string;
@@ -72,7 +72,16 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    fetchLocations();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        fetchLocations();
+      } else {
+        setLocations([]);
+        setLoading(false);
+      }
+    });
+
+    return unsubscribe; // cleanup listener
   }, []);
 
   const handleAddOrEditLocation = async () => {
@@ -214,7 +223,7 @@ export default function HomeScreen() {
           setNewLocation("");
         }}
       >
-        <Text className="text-white text-4xl font-bold">+</Text>
+        <Ionicons name="add" size={28} color="white" />
       </TouchableOpacity>
 
       {/* Add/Edit Modal */}
