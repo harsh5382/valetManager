@@ -39,6 +39,7 @@ type DriverFormProps = {
   onClose: () => void;
   onSuccess: () => void;
   driverData?: Driver | null;
+  notice?: string; // <-- notice prop added
 };
 
 export default function DriverForm({
@@ -47,6 +48,7 @@ export default function DriverForm({
   onClose,
   onSuccess,
   driverData,
+  notice,
 }: DriverFormProps) {
   const [firstName, setFirstName] = useState(driverData?.firstName || "");
   const [lastName, setLastName] = useState(driverData?.lastName || "");
@@ -164,9 +166,14 @@ export default function DriverForm({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView contentContainerStyle={{ padding: 20 }}>
-          <Text className="text-3xl font-bold text-blue-400 mb-8 text-center">
+          <Text className="text-3xl font-bold text-white mb-4 text-center">
             {driverData?.id ? "Edit Driver" : "Add Driver"}
           </Text>
+
+          {/* Display notice if provided */}
+          {notice && (
+            <Text className="text-yellow-400 text-center mb-4">{notice}</Text>
+          )}
 
           {/** Input fields */}
           {[
@@ -241,7 +248,7 @@ export default function DriverForm({
               </TouchableOpacity>
               {time.show && (
                 <DateTimePicker
-                  key={time.label} // optional, helps React track this child
+                  key={time.label}
                   value={new Date()}
                   mode="time"
                   display="spinner"

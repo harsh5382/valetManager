@@ -73,14 +73,18 @@ export default function GenerateBillScreen() {
 
   const computeSummary = (m: "month" | "today" | "driver") => {
     const now = new Date();
+
     if (m === "today") {
-      const todayStr = now.toISOString().split("T")[0];
       const todays = drivers.filter((d) => {
         if (!d.startDate) return false;
         const driverDate = d.startDate.toDate
-          ? d.startDate.toDate().toISOString().split("T")[0]
-          : new Date(d.startDate).toISOString().split("T")[0];
-        return driverDate === todayStr;
+          ? d.startDate.toDate()
+          : new Date(d.startDate);
+        return (
+          driverDate.getFullYear() === now.getFullYear() &&
+          driverDate.getMonth() === now.getMonth() &&
+          driverDate.getDate() === now.getDate()
+        );
       });
       const total = todays.reduce(
         (acc, cur) => acc + (Number(cur.payment) || 0),
@@ -152,26 +156,18 @@ export default function GenerateBillScreen() {
     );
   }, [drivers, searchQuery]);
 
-  // Generate PDF using HTML
   const generatePDF = async (html: string) => {
     try {
-      setPdfLoading(true); // start loader
+      setPdfLoading(true);
       const { uri } = await Print.printToFileAsync({ html });
-
-      // Move to permanent file
       const fileUri = FileSystem.documentDirectory + "bill.pdf";
-      await FileSystem.moveAsync({
-        from: uri,
-        to: fileUri,
-      });
-
-      // Share
+      await FileSystem.moveAsync({ from: uri, to: fileUri });
       await Sharing.shareAsync(fileUri);
     } catch (err) {
       console.log("PDF generation error:", err);
       Alert.alert("Error", "Failed to generate PDF.");
     } finally {
-      setPdfLoading(false); // stop loader
+      setPdfLoading(false);
     }
   };
 
@@ -252,7 +248,7 @@ export default function GenerateBillScreen() {
             style={{ backgroundColor: "rgba(30,144,255,0.06)" }}
           >
             <Ionicons name="today-outline" size={22} color="#1E90FF" />
-            <Text className="text-white mt-16 font-semibold">Today's Bill</Text>
+            <Text className="text-white mt-2 font-semibold">Today's Bill</Text>
             <Text className="text-gray-400 text-xs mt-1">
               Only today's records
             </Text>
@@ -276,7 +272,7 @@ export default function GenerateBillScreen() {
 
       {/* Modal for results */}
       <Modal visible={modalVisible} animationType="slide" transparent={false}>
-        <SafeAreaView className="flex-1 bg-black  px-4 pt-16">
+        <SafeAreaView className="flex-1 bg-black px-4 pt-16">
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-white text-2xl font-bold">
               {mode === "month"
@@ -327,7 +323,7 @@ export default function GenerateBillScreen() {
                   <TouchableOpacity
                     onPress={generateTodayPDF}
                     className="mt-4 bg-blue-600 p-3 rounded-2xl items-center"
-                    disabled={pdfLoading} // prevent multiple clicks
+                    disabled={pdfLoading}
                   >
                     {pdfLoading ? (
                       <ActivityIndicator color="#fff" />
@@ -361,7 +357,7 @@ export default function GenerateBillScreen() {
                   <TouchableOpacity
                     onPress={generateMonthPDF}
                     className="mt-4 bg-blue-600 p-3 rounded-2xl items-center"
-                    disabled={pdfLoading} // prevent multiple clicks
+                    disabled={pdfLoading}
                   >
                     {pdfLoading ? (
                       <ActivityIndicator color="#fff" />
@@ -381,7 +377,7 @@ export default function GenerateBillScreen() {
                     placeholderTextColor="#888"
                     value={searchQuery}
                     onChangeText={setSearchQuery}
-                    className="bg-gray-900 p-3 rounded-xl text-white mb-3 border border-gray-700"
+                    className="bg-gray-900 p-3 rounded-xl mb-3 border border-gray-700"
                   />
                   <ScrollView style={{ maxHeight: 220 }}>
                     {filteredDrivers.map((d) => (
@@ -420,7 +416,7 @@ export default function GenerateBillScreen() {
                       <TouchableOpacity
                         onPress={generateDriverPDF}
                         className="mt-4 bg-blue-600 p-3 rounded-2xl items-center"
-                        disabled={pdfLoading} // prevent multiple clicks
+                        disabled={pdfLoading}
                       >
                         {pdfLoading ? (
                           <ActivityIndicator color="#fff" />
@@ -441,3 +437,4 @@ export default function GenerateBillScreen() {
     </SafeAreaView>
   );
 }
+ 

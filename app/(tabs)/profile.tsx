@@ -89,12 +89,12 @@ export default function ProfileScreen() {
             className="p-4 flex-row justify-between items-center"
           >
             <Text className="text-white font-semibold text-lg">
-              Daily Payment
+              Payment
             </Text>
             <Ionicons name="cash-outline" size={20} color="#60A5FA" />
           </TouchableOpacity>
         </BlurView>
-
+       
         <BlurView
           intensity={70}
           tint="dark"
