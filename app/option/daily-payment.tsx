@@ -23,6 +23,7 @@ type Driver = {
   payment: string;
   phone?: string;
   location?: string;
+  status?: "active" | "inactive" | "removed"; // add driver status
   createdBy?: string;
   endTime?: string;
   createdAt?: Timestamp;
@@ -33,6 +34,23 @@ export default function PaymentsScreen() {
   const [loading, setLoading] = useState(false);
   const [totalPayment, setTotalPayment] = useState(0);
   const [viewMode, setViewMode] = useState<"daily" | "monthly">("daily");
+
+  const hasEndTimePassed = (endTime?: string) => {
+    if (!endTime) return false;
+    const now = new Date();
+    const match = endTime.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) return false;
+
+    let hours = parseInt(match[1], 10);
+    let minutes = parseInt(match[2], 10);
+    const meridian = match[3]?.toUpperCase();
+    if (meridian === "PM" && hours < 12) hours += 12;
+    if (meridian === "AM" && hours === 12) hours = 0;
+
+    const end = new Date();
+    end.setHours(hours, minutes, 0, 0);
+    return now >= end;
+  };
 
   const fetchDrivers = async () => {
     setLoading(true);
@@ -61,12 +79,23 @@ export default function PaymentsScreen() {
             ? data.createdAt.toDate()
             : new Date();
 
+        // daily: only show active drivers whose end time has passed
+        if (viewMode === "daily") {
+          if (
+            createdAt.toDateString() === currentDateString &&
+            data.status === "active" &&
+            hasEndTimePassed(data.endTime)
+          ) {
+            list.push({ id: docSnap.id, ...data });
+            total += Number(data.payment) || 0;
+          }
+        }
+
+        // monthly: show all drivers in month
         if (
-          (viewMode === "daily" &&
-            createdAt.toDateString() === currentDateString) ||
-          (viewMode === "monthly" &&
-            createdAt.getMonth() === currentMonth &&
-            createdAt.getFullYear() === currentYear)
+          viewMode === "monthly" &&
+          createdAt.getMonth() === currentMonth &&
+          createdAt.getFullYear() === currentYear
         ) {
           list.push({ id: docSnap.id, ...data });
           total += Number(data.payment) || 0;
@@ -142,6 +171,9 @@ export default function PaymentsScreen() {
                     </Text>
                     <Text className="text-gray-400 mt-1">
                       Phone: {driver.phone || "N/A"}
+                    </Text>
+                    <Text className="text-gray-400 mt-1">
+                      Status: {driver.status || "N/A"}
                     </Text>
                   </View>
 
