@@ -164,22 +164,22 @@ export default function CalendarScreen() {
                   <Text className="text-white font-bold text-lg">
                     {driver.firstName} {driver.lastName}
                   </Text>
-                  <Text className="text-gray-300 mt-1">📞 {driver.phone}</Text>
+                  <Text className="text-gray-300 mt-1"> {driver.phone}</Text>
                   <Text className="text-gray-300 mt-1">
-                    📍 Location: {driver.location || "-"}
+                     Location: {driver.location || "-"}
                   </Text>
                   <Text className="text-gray-300 mt-1">
-                    🗓️ Date:{" "}
+                     Date:{" "}
                     {driver.startDate instanceof Timestamp
                       ? driver.startDate.toDate().toDateString()
                       : new Date(driver.startDate).toDateString()}
                   </Text>
                   <Text className="text-gray-300 mt-1">
-                    ⏰ Start: {driver.startTime || "-"} | End:{" "}
+                     Start: {driver.startTime || "-"} | End:{" "}
                     {driver.endTime || "-"}
                   </Text>
                   <Text className="text-gray-300 mt-1">
-                    💰 Payment: ₹{driver.payment || "0"}
+                     Payment: ₹{driver.payment || "0"}
                   </Text>
                 </View>
               ))}

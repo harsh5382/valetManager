@@ -7,11 +7,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Modal,
-  Platform,
 } from "react-native";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  Timestamp,
+} from "firebase/firestore";
 import { db, auth } from "../../auth/firebase";
-import { FontAwesome5 } from "@expo/vector-icons";
+import { FontAwesome6 } from "@expo/vector-icons";
 
 type Driver = {
   id: string;
@@ -22,7 +27,8 @@ type Driver = {
   startTime?: string;
   endTime?: string;
   payment?: string;
-  startDate?: any;
+  startDate?: Date;
+  deleted?: boolean;
 };
 
 type Location = {
@@ -45,6 +51,7 @@ export default function SearchScreen() {
       const user = auth.currentUser;
       if (!user) return setLoading(false);
 
+      // Fetch all drivers for the user
       const driverQuery = query(
         collection(db, "drivers"),
         where("createdBy", "==", user.uid)
@@ -52,10 +59,32 @@ export default function SearchScreen() {
       const driverSnap = await getDocs(driverQuery);
       const driverList: Driver[] = [];
       driverSnap.forEach((docSnap) => {
-        driverList.push({ ...(docSnap.data() as Driver), id: docSnap.id });
+        const data = docSnap.data() as Driver;
+
+        // Skip deleted drivers
+        if (data.deleted) return;
+
+        driverList.push({
+          id: docSnap.id,
+          firstName: data.firstName || "",
+          lastName: data.lastName || "",
+          phone: data.phone || "",
+          location: data.location || "",
+          startTime: data.startTime || "",
+          endTime: data.endTime || "",
+          payment: data.payment || "",
+          startDate:
+            data.startDate instanceof Timestamp
+              ? data.startDate.toDate()
+              : data.startDate
+                ? new Date(data.startDate)
+                : undefined,
+          deleted: data.deleted || false,
+        });
       });
       setDrivers(driverList);
 
+      // Fetch locations for the user
       const locationQuery = query(
         collection(db, "locations"),
         where("createdBy", "==", user.uid)
@@ -63,7 +92,11 @@ export default function SearchScreen() {
       const locationSnap = await getDocs(locationQuery);
       const locationList: Location[] = [];
       locationSnap.forEach((docSnap) => {
-        locationList.push({ ...(docSnap.data() as Location), id: docSnap.id });
+        const data = docSnap.data() as Location;
+        locationList.push({
+          id: docSnap.id,
+          name: data.name || "",
+        });
       });
       setLocations(locationList);
     } catch (error: any) {
@@ -77,8 +110,9 @@ export default function SearchScreen() {
     fetchData();
   }, []);
 
+  // Filter drivers & locations by search query
   const filteredDrivers = drivers.filter((d) =>
-    `${d.firstName} ${d.lastName}`
+    `${d.firstName || ""} ${d.lastName || ""}`
       .toLowerCase()
       .includes(searchQuery.toLowerCase())
   );
@@ -92,7 +126,7 @@ export default function SearchScreen() {
 
       {/* Search Bar */}
       <View className="flex-row items-center bg-gray-900 rounded-xl px-4 py-3 mb-6 border border-gray-700">
-        <FontAwesome5 name="search" size={18} color="#888" />
+        <FontAwesome6 name="magnifying-glass" size={18} color="#888" />
         <TextInput
           className="flex-1 text-white ml-3 text-base"
           placeholder="Search drivers or locations"
@@ -134,7 +168,7 @@ export default function SearchScreen() {
                   Location: {driver.location || "-"}
                 </Text>
               </View>
-              <FontAwesome5 name="chevron-right" size={18} color="#888" />
+              <FontAwesome6 name="chevron-right" size={18} color="#888" />
             </TouchableOpacity>
           ))}
 
@@ -170,40 +204,67 @@ export default function SearchScreen() {
 
       {/* Driver Details Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent={true}>
-        <View className="flex-1 justify-center items-center bg-black bg-opacity-90 px-4">
-          <View className="bg-gray-900 p-6 rounded-2xl border border-gray-700 w-full">
-            <TouchableOpacity
-              onPress={() => setModalVisible(false)}
-              className="self-end mb-3 p-2 rounded-full bg-gray-800"
-            >
-              <FontAwesome5 name="times" size={20} color="#fff" />
-            </TouchableOpacity>
-
+        <View className="flex-1 justify-center items-center bg-black/50 backdrop-blur-md px-6">
+          <View className="bg-gray-900 p-8 rounded-2xl border border-gray-700 w-full max-w-xl min-h-[320px]">
             {selectedDriver && (
-              <>
-                <Text className="text-white font-bold text-2xl mb-3">
-                  {selectedDriver.firstName} {selectedDriver.lastName}
-                </Text>
-                <Text className="text-gray-300 mt-1">
-                  Phone: {selectedDriver.phone || "-"}
-                </Text>
-                <Text className="text-gray-300 mt-1">
-                  Location: {selectedDriver.location || "-"}
-                </Text>
-                <Text className="text-gray-300 mt-1">
-                  Start: {selectedDriver.startTime || "-"} | End:{" "}
-                  {selectedDriver.endTime || "-"}
-                </Text>
-                <Text className="text-gray-300 mt-1">
-                  Payment: ₹{selectedDriver.payment || 0}
-                </Text>
-                <Text className="text-gray-300 mt-1">
-                  Date:{" "}
-                  {selectedDriver.startDate
-                    ? selectedDriver.startDate.toDate().toDateString()
-                    : "-"}
-                </Text>
-              </>
+              <View className="space-y-6">
+                <View className="flex-row justify-between items-center border-b border-gray-700 pb-2">
+                  <Text className="text-white font-bold text-2xl">
+                    {selectedDriver.firstName} {selectedDriver.lastName}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setModalVisible(false)}
+                    className="p-2"
+                  >
+                    <FontAwesome6 name="xmark" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+                <View className="space-y-3">
+                  <View className="flex-row justify-between pt-5">
+                    <Text className="text-gray-300 font-semibold text-base ">
+                      Phone:
+                    </Text>
+                    <Text className="text-gray-300 text-right text-base">
+                      {selectedDriver.phone || "-"}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between pt-5">
+                    <Text className="text-gray-300 font-semibold text-base">
+                      Location:
+                    </Text>
+                    <Text className="text-gray-300 text-right text-base">
+                      {selectedDriver.location || "-"}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between pt-5">
+                    <Text className="text-gray-300 font-semibold text-base">
+                      Shift:
+                    </Text>
+                    <Text className="text-gray-300 text-right text-base">
+                      {selectedDriver.startTime || "-"} -{" "}
+                      {selectedDriver.endTime || "-"}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between pt-5">
+                    <Text className="text-gray-300 font-semibold text-base">
+                      Payment:
+                    </Text>
+                    <Text className="text-gray-300 text-right text-base">
+                      ₹{selectedDriver.payment || "0"}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between pt-5">
+                    <Text className="text-gray-300 font-semibold text-base">
+                      Date:
+                    </Text>
+                    <Text className="text-gray-300 text-right text-base">
+                      {selectedDriver.startDate
+                        ? selectedDriver.startDate.toDateString()
+                        : "-"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             )}
           </View>
         </View>

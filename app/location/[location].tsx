@@ -16,7 +16,6 @@ import {
   where,
   doc,
   updateDoc,
-  deleteDoc,
   Timestamp,
 } from "firebase/firestore";
 import { db, auth } from "../../auth/firebase";
@@ -29,42 +28,51 @@ export default function LocationDetail() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
-  const [selectedDriver, setSelectedDriver] = useState<Driver | undefined>(
-    undefined
-  );
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [formNotice, setFormNotice] = useState<string | undefined>(undefined);
 
   // Check if endTime has passed
-  const hasEndTimePassed = (endTime?: string) => {
-    if (!endTime) return false;
+  const hasEndTimePassed = (driver: Driver) => {
+    if (!driver.startDate || !driver.endTime) return false;
+
+    const startDate =
+      driver.startDate instanceof Timestamp
+        ? driver.startDate.toDate()
+        : new Date(driver.startDate);
+
     const now = new Date();
-    const match = endTime.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+
+    const match = driver.endTime.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
     if (!match) return false;
 
     let hours = parseInt(match[1], 10);
     const minutes = parseInt(match[2], 10);
-    const meridian = match[3]?.toUpperCase();
+    const meridian = match[3].toUpperCase();
 
     if (meridian === "PM" && hours < 12) hours += 12;
     if (meridian === "AM" && hours === 12) hours = 0;
 
-    const end = new Date();
+    const end = new Date(startDate);
     end.setHours(hours, minutes, 0, 0);
 
     return now >= end;
   };
 
-  // Deactivate expired drivers
+  // Deactivate expired drivers and reset their times
   const deactivateExpiredDrivers = async (driverList: Driver[]) => {
     for (const driver of driverList) {
-      if (driver.id && driver.location && hasEndTimePassed(driver.endTime)) {
-        const driverId = driver.id; // Safe for TypeScript
+      if (driver.id && hasEndTimePassed(driver)) {
         try {
-          await updateDoc(doc(db, "drivers", driverId), {
+          await updateDoc(doc(db, "drivers", driver.id), {
             location: "",
+            startTime: "", // Clear times for reassignment
+            endTime: "",
             updatedAt: Timestamp.now(),
           });
           console.log(`Driver ${driver.firstName} is now inactive`);
+          driver.location = ""; // Update locally to reflect deactivation
+          driver.startTime = "";
+          driver.endTime = "";
         } catch (err: any) {
           console.log("Error deactivating driver:", err.message);
         }
@@ -72,53 +80,56 @@ export default function LocationDetail() {
     }
   };
 
-  // Update startDate if older than today
+  // Update startDate only if older than today and driver is expired
   const updateDriverDateIfNeeded = async (driver: Driver) => {
     if (!driver.id || !driver.startDate) return;
+
     const startDate =
       driver.startDate instanceof Timestamp
         ? driver.startDate.toDate()
         : new Date(driver.startDate);
     const now = new Date();
 
-    if (startDate.toDateString() !== now.toDateString()) {
-      const driverId = driver.id; // Safe for TypeScript
-      try {
-        await updateDoc(doc(db, "drivers", driverId), {
-          startDate: Timestamp.fromDate(new Date(now.setHours(0, 0, 0, 0))),
-        });
-        console.log(`Driver ${driver.firstName} date updated to today`);
-      } catch (err: any) {
-        console.log(
-          `Failed to update driver ${driver.firstName}:`,
-          err.message
-        );
+    // Only reset date for expired drivers
+    if (hasEndTimePassed(driver)) {
+      if (startDate.toDateString() !== now.toDateString()) {
+        try {
+          await updateDoc(doc(db, "drivers", driver.id), {
+            startDate: Timestamp.fromDate(new Date(now.setHours(0, 0, 0, 0))),
+          });
+          console.log(`Driver ${driver.firstName} date updated to today`);
+        } catch (err: any) {
+          console.log(
+            `Failed to update driver ${driver.firstName}:`,
+            err.message
+          );
+        }
       }
     }
   };
 
-  // Fetch drivers from Firestore
+  // Fetch drivers
   const fetchDrivers = async () => {
     if (!location) return;
     setLoading(true);
 
     try {
       const user = auth.currentUser;
-      if (!user) {
-        Alert.alert("Error", "No user logged in");
-        setLoading(false);
-        return;
-      }
+      if (!user) throw new Error("No user logged in");
 
       const q = query(
         collection(db, "drivers"),
         where("createdBy", "==", user.uid)
       );
       const snapshot = await getDocs(q);
+
       const list: Driver[] = [];
 
       for (const docSnap of snapshot.docs) {
-        const rawData = docSnap.data();
+        const rawData = docSnap.data() as Driver;
+
+        if (rawData.deleted) continue;
+
         const driver: Driver = {
           id: docSnap.id,
           firstName: rawData.firstName || "",
@@ -129,35 +140,30 @@ export default function LocationDetail() {
           endTime: rawData.endTime || "",
           payment: rawData.payment || "",
           startDate: rawData.startDate || undefined,
+          history: rawData.history || [],
+          createdBy: rawData.createdBy || "",
+          deleted: rawData.deleted || false,
         };
 
         await updateDriverDateIfNeeded(driver);
         list.push(driver);
       }
 
+      // Deactivate expired drivers before filtering
       await deactivateExpiredDrivers(list);
 
-      // Refresh after deactivation
-      const refreshedSnapshot = await getDocs(q);
-      const refreshedList: Driver[] = [];
-      refreshedSnapshot.forEach((docSnap) => {
-        const rawData = docSnap.data();
-        refreshedList.push({
-          id: docSnap.id,
-          firstName: rawData.firstName || "",
-          lastName: rawData.lastName || "",
-          phone: rawData.phone || "",
-          location: rawData.location || "",
-          startTime: rawData.startTime || "",
-          endTime: rawData.endTime || "",
-          payment: rawData.payment || "",
-          startDate: rawData.startDate || undefined,
-        });
+      // Filter drivers: include unassigned, assigned to this location, or inactive (expired)
+      const displayedDrivers = list.filter((d) => {
+        // If driver is unassigned or assigned to this location
+        if (!d.location || d.location === location) return true;
+        // If driver is inactive (endTime passed), allow reassignment
+        if (hasEndTimePassed(d)) return true;
+        return false;
       });
 
-      setDrivers(refreshedList);
-    } catch (error: any) {
-      Alert.alert("Error", error.message);
+      setDrivers(displayedDrivers);
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
     } finally {
       setLoading(false);
     }
@@ -167,68 +173,82 @@ export default function LocationDetail() {
     fetchDrivers();
   }, [location]);
 
-  // Assign driver (handle inactive driver notice)
+  // Assign driver
   const assignDriver = async (driver: Driver) => {
     if (!driver.id) return;
 
-    const driverId = driver.id;
-
-    if (!driver.location) {
-      // Inactive driver → open form with notice
-      setSelectedDriver(driver);
+    if (hasEndTimePassed(driver)) {
+      // For drivers whose end time has passed, open form to set new times and assign
+      setSelectedDriver({
+        ...driver,
+        startTime: "", // Clear times to force re-selection
+        endTime: "",
+      });
       setFormNotice("Assign new start/end time for this driver");
       setFormVisible(true);
-    } else {
+    } else if (!driver.location) {
+      // For unassigned drivers with valid times, assign directly
       try {
-        await updateDoc(doc(db, "drivers", driverId), {
+        await updateDoc(doc(db, "drivers", driver.id), {
           location,
           updatedAt: Timestamp.now(),
         });
         Alert.alert("Success", `${driver.firstName} assigned to ${location}`);
         fetchDrivers();
-      } catch (error: any) {
-        Alert.alert("Error", error.message);
+      } catch (err: any) {
+        Alert.alert("Error", err.message);
       }
+    } else {
+      // Driver is already assigned to this location or another active location
+      Alert.alert(
+        "Info",
+        `${driver.firstName} is already assigned to ${driver.location}. Remove them from that location first.`
+      );
     }
   };
 
+  // Remove driver from location
   const removeFromLocation = async (driver: Driver) => {
-    if (!driver.id) return;
-    const driverId = driver.id;
-    const driverName = driver.firstName;
+    if (!driver.id || !driver.location) return;
 
-    Alert.alert("Remove Driver", `Remove ${driverName} from this location?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await updateDoc(doc(db, "drivers", driverId), {
-              location: "",
-              updatedAt: Timestamp.now(),
-            });
-            fetchDrivers();
-          } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to remove driver");
-          }
+    Alert.alert(
+      "Remove Driver",
+      `Remove ${driver.firstName} from this location?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await updateDoc(doc(db, "drivers", driver.id), {
+                location: "",
+                updatedAt: Timestamp.now(),
+              });
+              fetchDrivers();
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to remove driver");
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
+  // Edit driver
   const handleEdit = (driver: Driver) => {
     setSelectedDriver(driver);
     setFormNotice(undefined);
     setFormVisible(true);
   };
 
-  const handleDelete = async (driverId?: string) => {
-    if (!driverId) return;
-    const id = driverId;
+  // Delete driver: mark deleted and push current assignment to history
+  const handleDelete = async (driver: Driver) => {
+    if (!driver.id) return;
+
     Alert.alert(
       "Confirm Delete",
-      "Are you sure you want to delete this driver?",
+      `Are you sure you want to delete ${driver.firstName}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -236,10 +256,29 @@ export default function LocationDetail() {
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, "drivers", id));
+              const driverRef = doc(db, "drivers", driver.id);
+              const historyEntry = driver.location
+                ? {
+                    location: driver.location,
+                    startTime: driver.startTime || "",
+                    endTime: driver.endTime || "",
+                    payment: driver.payment || "",
+                    startDate: driver.startDate || Timestamp.now(),
+                  }
+                : null;
+
+              await updateDoc(driverRef, {
+                deleted: true,
+                location: "",
+                history: historyEntry
+                  ? [...(driver.history || []), historyEntry]
+                  : driver.history || [],
+                updatedAt: Timestamp.now(),
+              });
+
               fetchDrivers();
-            } catch (error: any) {
-              Alert.alert("Error", error.message);
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to delete driver");
             }
           },
         },
@@ -266,17 +305,16 @@ export default function LocationDetail() {
               onEdit={handleEdit}
               onRemove={removeFromLocation}
               onAssign={assignDriver}
-              onDelete={handleDelete}
+              onDelete={() => handleDelete(driver)}
               currentLocation={location}
             />
           ))
         )}
       </ScrollView>
 
-      {/* Floating Add Button */}
       <TouchableOpacity
         onPress={() => {
-          setSelectedDriver(undefined);
+          setSelectedDriver(null);
           setFormNotice(undefined);
           setFormVisible(true);
         }}
@@ -285,17 +323,18 @@ export default function LocationDetail() {
         <Ionicons name="add" size={28} color="white" />
       </TouchableOpacity>
 
-      {/* Driver Form Modal */}
       <DriverForm
         location={location || ""}
         visible={formVisible}
         onClose={() => {
           setFormVisible(false);
           setFormNotice(undefined);
+          setSelectedDriver(null);
         }}
         onSuccess={() => {
           setFormVisible(false);
           setFormNotice(undefined);
+          setSelectedDriver(null);
           fetchDrivers();
         }}
         driverData={selectedDriver}

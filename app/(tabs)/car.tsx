@@ -22,32 +22,18 @@ import {
 import { db, auth } from "../../auth/firebase";
 import { Ionicons } from "@expo/vector-icons";
 import DriverForm from "../../components/DriverForm";
-
-type Driver = {
-  id?: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  location: string;
-  startTime: string;
-  endTime: string;
-  payment: string;
-  startDate?: any;
-  createdBy?: string;
-};
+import { Driver } from "../../types/types";
 
 export default function CarScreen() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedDriver, setSelectedDriver] = useState<Driver | undefined>(
-    undefined
-  );
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
-  // Animated values for each driver card
   const animatedHeights = useRef<Record<string, Animated.Value>>({}).current;
 
+  // Fetch drivers from Firestore
   const fetchDrivers = async () => {
     setLoading(true);
     try {
@@ -59,21 +45,35 @@ export default function CarScreen() {
         where("createdBy", "==", user.uid)
       );
       const snapshot = await getDocs(q);
-      const list: Driver[] = [];
-      snapshot.forEach((docSnap) =>
-        list.push({ id: docSnap.id, ...docSnap.data() } as Driver)
-      );
 
-      // Initialize animated values for new drivers
-      list.forEach((driver) => {
-        if (!animatedHeights[driver.id!]) {
-          animatedHeights[driver.id!] = new Animated.Value(0);
-        }
+      const list: Driver[] = [];
+      snapshot.forEach((docSnap) => {
+        const rawData = docSnap.data();
+        const driver: Driver = {
+          id: docSnap.id,
+          firstName: rawData.firstName || "",
+          lastName: rawData.lastName || "",
+          phone: rawData.phone || "",
+          location: rawData.location || "",
+          startTime: rawData.startTime || "",
+          endTime: rawData.endTime || "",
+          payment: rawData.payment || "",
+          startDate: rawData.startDate || undefined,
+          createdBy: rawData.createdBy || "",
+          history: rawData.history || [],
+          deleted: rawData.deleted || false,
+        };
+
+        // Skip deleted drivers
+        if (!driver.deleted) list.push(driver);
+
+        if (driver.id && !animatedHeights[driver.id])
+          animatedHeights[driver.id] = new Animated.Value(0);
       });
 
       setDrivers(list);
     } catch (error: any) {
-      console.log(error.message);
+      console.log("Fetch drivers error:", error.message);
     } finally {
       setLoading(false);
     }
@@ -83,41 +83,55 @@ export default function CarScreen() {
     fetchDrivers();
   }, []);
 
-  // Expand/collapse animation
-  const toggleCard = (driverId?: string) => {
-    if (!driverId) return;
-
+  const toggleCard = (driverId: string) => {
     const toValue = expandedCard === driverId ? 0 : 1;
-
     Animated.timing(animatedHeights[driverId], {
       toValue,
       duration: 250,
       useNativeDriver: false,
     }).start();
-
-    setExpandedCard((prev) => (prev === driverId ? null : driverId));
+    setExpandedCard(expandedCard === driverId ? null : driverId);
   };
 
-  const handleRemoveFromLocation = (driver: Driver) => {
+  // DELETE driver logic
+  const handleDeleteDriver = (driver: Driver) => {
     if (!driver.id) return;
 
     Alert.alert(
-      "Confirm Remove",
-      `Remove ${driver.firstName} from this location?`,
+      "Delete Driver",
+      `Are you sure you want to delete ${driver.firstName}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Remove",
+          text: "Delete",
           style: "destructive",
           onPress: async () => {
             try {
-              await updateDoc(doc(db, "drivers", driver.id!), {
+              const driverRef = doc(db, "drivers", driver.id);
+
+              // Push current assignment to history before deleting
+              const historyEntry = driver.location
+                ? {
+                    location: driver.location,
+                    startTime: driver.startTime || "",
+                    endTime: driver.endTime || "",
+                    payment: driver.payment || "",
+                    startDate: driver.startDate || Timestamp.now(),
+                  }
+                : null;
+
+              await updateDoc(driverRef, {
+                deleted: true,
                 location: "",
+                history: historyEntry
+                  ? [...(driver.history || []), historyEntry]
+                  : driver.history || [],
                 updatedAt: Timestamp.now(),
               });
+
               fetchDrivers();
             } catch (error: any) {
-              Alert.alert("Error", error.message);
+              Alert.alert("Error", error.message || "Failed to delete driver");
             }
           },
         },
@@ -157,7 +171,7 @@ export default function CarScreen() {
                 >
                   <TouchableOpacity
                     activeOpacity={0.9}
-                    onPress={() => toggleCard(driver.id)}
+                    onPress={() => toggleCard(driver.id!)}
                     className="px-5 py-3 flex-row justify-between items-center"
                   >
                     <Text className="text-white font-semibold text-lg">
@@ -168,7 +182,7 @@ export default function CarScreen() {
                         <Ionicons name="pencil" size={20} color="#60A5FA" />
                       </TouchableOpacity>
                       <TouchableOpacity
-                        onPress={() => handleRemoveFromLocation(driver)}
+                        onPress={() => handleDeleteDriver(driver)}
                       >
                         <Ionicons name="trash" size={20} color="#EF4444" />
                       </TouchableOpacity>
@@ -193,7 +207,7 @@ export default function CarScreen() {
                       </Text>
                       <Text className="text-gray-300">
                         Date:{" "}
-                        {driver.startDate?.toDate().toDateString() || "N/A"}
+                        {driver.startDate?.toDate?.()?.toDateString() || "N/A"}
                       </Text>
                       <Text className="text-gray-300">
                         Start: {driver.startTime} | End: {driver.endTime}
@@ -222,7 +236,7 @@ export default function CarScreen() {
           zIndex: 9999,
         }}
         onPress={() => {
-          setSelectedDriver(undefined);
+          setSelectedDriver(null);
           setModalVisible(true);
         }}
       >
@@ -230,11 +244,11 @@ export default function CarScreen() {
       </TouchableOpacity>
 
       <DriverForm
-        location={selectedDriver?.location ?? ""}
+        location={selectedDriver?.location || ""}
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         onSuccess={fetchDrivers}
-        driverData={selectedDriver ?? undefined}
+        driverData={selectedDriver ?? null}
       />
     </View>
   );
