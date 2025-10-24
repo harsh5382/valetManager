@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
-  Linking,
 } from "react-native";
 import {
   collection,
@@ -33,7 +32,6 @@ export default function PaymentsScreen() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(false);
   const [totalPayment, setTotalPayment] = useState(0);
-  const [paying, setPaying] = useState(false);
   const [viewMode, setViewMode] = useState<"daily" | "monthly">("daily");
 
   const fetchDrivers = async () => {
@@ -63,7 +61,6 @@ export default function PaymentsScreen() {
             ? data.createdAt.toDate()
             : new Date();
 
-        // Filter based on viewMode
         if (
           (viewMode === "daily" &&
             createdAt.toDateString() === currentDateString) ||
@@ -89,48 +86,6 @@ export default function PaymentsScreen() {
   useEffect(() => {
     fetchDrivers();
   }, [viewMode]);
-
-  const hasEndTimePassed = (endTime?: string) => {
-    if (!endTime) return false;
-    const now = new Date();
-    const match = endTime.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-    if (!match) return false;
-
-    let hours = parseInt(match[1], 10);
-    let minutes = parseInt(match[2], 10);
-    const meridian = match[3]?.toUpperCase();
-    if (meridian === "PM" && hours < 12) hours += 12;
-    if (meridian === "AM" && hours === 12) hours = 0;
-
-    const end = new Date();
-    end.setHours(hours, minutes, 0, 0);
-    return now >= end;
-  };
-
-  const handlePay = async (driver: Driver) => {
-    try {
-      setPaying(true);
-      const upiId = driver.phone ? `${driver.phone}@upi` : "example@upi";
-      const amount = driver.payment || "0";
-
-      const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(
-        `${driver.firstName} ${driver.lastName}`
-      )}&am=${amount}&cu=INR&tn=${encodeURIComponent("Valet Service Payment")}`;
-
-      const supported = await Linking.canOpenURL(upiUrl);
-      if (supported) await Linking.openURL(upiUrl);
-      else
-        Alert.alert(
-          "UPI App Not Found",
-          "Please install a UPI app like Google Pay, PhonePe, or Paytm."
-        );
-    } catch (error: unknown) {
-      const err = error as Error;
-      Alert.alert("Payment Error", err.message);
-    } finally {
-      setPaying(false);
-    }
-  };
 
   return (
     <View className="flex-1 bg-black pt-16 px-4">
@@ -164,15 +119,12 @@ export default function PaymentsScreen() {
         <ActivityIndicator size="large" color="#1E90FF" />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-          {drivers.map((driver, index) => {
-            // Show Pay button logic
-            const showPayButton =
-              viewMode === "monthly" || // always show for monthly
-              (driver.location &&
-                driver.endTime &&
-                hasEndTimePassed(driver.endTime));
-
-            return (
+          {drivers.length === 0 ? (
+            <Text className="text-gray-400 text-center mt-10">
+              No driver data found for {viewMode} view.
+            </Text>
+          ) : (
+            drivers.map((driver, index) => (
               <View
                 key={driver.id || index}
                 className="bg-gray-900 p-4 rounded-2xl border border-gray-700 mb-4"
@@ -188,31 +140,18 @@ export default function PaymentsScreen() {
                     <Text className="text-gray-400 mt-1">
                       End Time: {driver.endTime || "N/A"}
                     </Text>
+                    <Text className="text-gray-400 mt-1">
+                      Phone: {driver.phone || "N/A"}
+                    </Text>
                   </View>
 
                   <Text className="text-white font-bold text-lg">
                     ₹{driver.payment || 0}
                   </Text>
                 </View>
-
-                {showPayButton && (
-                  <TouchableOpacity
-                    className="bg-green-600 mt-3 py-2 rounded-full items-center"
-                    onPress={() => handlePay(driver)}
-                    disabled={paying}
-                  >
-                    {paying ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text className="text-white font-semibold text-lg">
-                        Pay
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
               </View>
-            );
-          })}
+            ))
+          )}
         </ScrollView>
       )}
     </View>
